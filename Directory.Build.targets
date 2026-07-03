@@ -1,0 +1,23 @@
+<Project>
+
+  <!--
+    Constitution Principle VII (Layered .NET Project Architecture): enforces at build time that
+    no ".Data" or ".Business" library ever references an entry-point/host project. Without this,
+    ProjectReference is just a DAG with no notion of "layer" — nothing in MSBuild otherwise stops
+    a lower-tier library from referencing a higher-tier one, since doing so doesn't create an
+    actual reference cycle for the ones that matter here (e.g., Api.Data -> BFF is perfectly
+    legal to MSBuild on its own).
+  -->
+  <Target Name="GariKaagadaEnforceLayering" AfterTargets="ResolveProjectReferences" BeforeTargets="Build">
+    <ItemGroup>
+      <_GariKaagadaIllegalUpwardReference
+        Include="@(ProjectReference)"
+        Condition="('$(MSBuildProjectName)' == 'GariKaagada.Api.Data' or '$(MSBuildProjectName)' == 'GariKaagada.Api.Business' or '$(MSBuildProjectName)' == 'GariKaagada.BFF.Business' or '$(MSBuildProjectName)' == 'GariKaagada.Contracts') and
+                  ('%(Filename)' == 'GariKaagada.BFF' or '%(Filename)' == 'GariKaagada.Api' or '%(Filename)' == 'GariKaagada.AppHost' or '%(Filename)' == 'GariKaagada.MigrationWorker')" />
+    </ItemGroup>
+    <Error
+      Condition="'@(_GariKaagadaIllegalUpwardReference)' != ''"
+      Text="Constitution Principle VII violation: '$(MSBuildProjectName)' MUST NOT reference '@(_GariKaagadaIllegalUpwardReference)' — that is a reference to a higher/entry-point tier from a Data/Business/Contracts project." />
+  </Target>
+
+</Project>

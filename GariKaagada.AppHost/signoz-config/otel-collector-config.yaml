@@ -1,0 +1,120 @@
+# Overrides the signoz/signoz-otel-collector image's baked-in default config
+# (/etc/otel/config.yaml), which hardcodes "localhost"/"clickhouse" as the ClickHouse
+# hostname — meaningless once ClickHouse is its own separate Aspire container. Two changes
+# from the image's own default, both in the two ClickHouse exporters' DSNs below:
+#   1. Hostname changed to "signoz-clickhouse" (this AppHost's resource name for that
+#      container, resolvable via Aspire's container network DNS), port 9000 (ClickHouse's
+#      native protocol port).
+#   2. Credentials added (default:signoz-internal-dev-only) — ClickHouse's image disables all
+#      network access for the "default" user unless CLICKHOUSE_PASSWORD is set (confirmed from
+#      the container's own startup log), so the AppHost sets that same password via
+#      CLICKHOUSE_PASSWORD on the signoz-clickhouse container.
+receivers:
+  otlp/spanmetrics:
+    protocols:
+      grpc:
+        endpoint: "localhost:12345"
+  otlp:
+    protocols:
+      # Explicit 0.0.0.0 endpoints (not the receiver's own "localhost" default): this
+      # container's OTLP ports are reached from *other* Aspire-managed containers/processes
+      # and, for the http port, from the host's published port too — a receiver bound to
+      # loopback only accepts the TCP connection (proxied within the container's own network
+      # namespace) but never completes the request, which looks like a hang/empty-reply from
+      # outside. Confirmed via the container's own startup log ("endpoint": "127.0.0.1:4318")
+      # before this fix.
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      # cors is for the Angular frontend's browser-side OTLP/HTTP log export (see
+      # gari-kagada-client's telemetry.ts) — its dev-server port is dynamic (Aspire's
+      # PORT env var), hence the localhost wildcard rather than one fixed origin.
+      http:
+        endpoint: "0.0.0.0:4318"
+        cors:
+          allowed_origins:
+            - "http://localhost:*"
+  jaeger:
+    protocols:
+      grpc:
+      thrift_http:
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu:
+      load:
+      memory:
+      disk:
+      filesystem:
+      network:
+processors:
+  batch:
+    send_batch_size: 1000
+    timeout: 10s
+  signozspanmetrics/prometheus:
+    metrics_exporter: prometheus
+    latency_histogram_buckets: [100us, 1ms, 2ms, 6ms, 10ms, 50ms, 100ms, 250ms, 500ms, 1000ms, 1400ms, 2000ms, 5s, 10s, 20s, 40s, 60s ]
+    dimensions_cache_size: 10000
+    dimensions:
+      - name: service.namespace
+        default: default
+      - name: deployment.environment
+        default: default
+  # memory_limiter:
+  #   # 80% of maximum memory up to 2G
+  #   limit_mib: 1500
+  #   # 25% of limit up to 2G
+  #   spike_limit_mib: 512
+  #   check_interval: 5s
+  #
+  #   # 50% of the maximum memory
+  #   limit_percentage: 50
+  #   # 20% of max memory usage spike expected
+  #   spike_limit_percentage: 20
+  # queued_retry:
+  #   num_workers: 4
+  #   queue_size: 100
+  #   retry_on_failure: true
+extensions:
+  zpages: {}
+exporters:
+  clickhousetraces:
+    datasource: tcp://default:signoz-internal-dev-only@signoz-clickhouse:9000/signoz_traces
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      queue_size: 100
+      num_consumers: 5
+  signozclickhousemetrics:
+    dsn: tcp://default:signoz-internal-dev-only@signoz-clickhouse:9000/signoz_metrics
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+  # Absent entirely from the image's own baked-in default config (confirmed by extracting it
+  # directly) — that default only wires traces/metrics pipelines, not logs. Added so both the
+  # .NET services' ServiceDefaults logging and the Angular frontend's OTel Web SDK (see
+  # gari-kagada-client's telemetry.ts) actually reach ClickHouse instead of 404ing.
+  clickhouselogsexporter:
+    dsn: tcp://default:signoz-internal-dev-only@signoz-clickhouse:9000/signoz_logs
+    timeout: 10s
+    use_new_schema: true
+service:
+  extensions: [zpages]
+  pipelines:
+    traces:
+      receivers: [jaeger, otlp]
+      processors: [signozspanmetrics/prometheus, batch]
+      exporters: [clickhousetraces]
+    metrics:
+      receivers: [otlp, hostmetrics]
+      processors: [batch]
+      exporters: [signozclickhousemetrics]
+    metrics/spanmetrics:
+      receivers: [otlp/spanmetrics]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [clickhouselogsexporter]

@@ -1,0 +1,17 @@
+<!--
+  Enables the single-node "default" cluster's use of ClickHouse Keeper for distributed DDL
+  (ON CLUSTER), which SigNoz's schema migrator requires even for a single-node deployment.
+  The default clickhouse-server image's own config.xml only ships a commented-out/placeholder
+  <zookeeper> block (confirmed by inspecting the running container directly), so this file is
+  mounted into /etc/clickhouse-server/config.d/ to supply a real one, pointing at the
+  "signoz-clickhouse-keeper" container (this AppHost's resource name for it) on its keeper TCP
+  port 9181.
+-->
+<clickhouse>
+  <zookeeper>
+    <node>
+      <host>signoz-clickhouse-keeper</host>
+      <port>9181</port>
+    </node>
+  </zookeeper>
+</clickhouse>

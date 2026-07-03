@@ -1,0 +1,9 @@
+<!--
+  The clickhouse/clickhouse-keeper image's default config binds its keeper TCP port (9181)
+  to loopback only (127.0.0.1 / ::1) — confirmed via `netstat` inside the running container —
+  which makes it unreachable from the separate signoz-clickhouse container over Aspire's
+  container network. This override makes it listen on all interfaces.
+-->
+<clickhouse>
+  <listen_host>0.0.0.0</listen_host>
+</clickhouse>

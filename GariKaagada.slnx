@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/Api/">
+    <Project Path="Api/GariKaagada.Api.Business/GariKaagada.Api.Business.csproj" />
+    <Project Path="Api/GariKaagada.Api.Data/GariKaagada.Api.Data.csproj" />
+    <Project Path="Api/GariKaagada.Api/GariKaagada.Api.csproj" />
+  </Folder>
+  <Folder Name="/BFF/">
+    <Project Path="BFF/GariKaagada.BFF.Business/GariKaagada.BFF.Business.csproj" />
+    <Project Path="BFF/GariKaagada.BFF/GariKaagada.BFF.csproj" />
+  </Folder>
+  <Project Path="GariKaagada.AppHost/GariKaagada.AppHost.csproj" />
+  <Project Path="GariKaagada.Contracts/GariKaagada.Contracts.csproj" />
+  <Project Path="GariKaagada.MigrationWorker/GariKaagada.MigrationWorker.csproj" />
+  <Project Path="GariKaagada.ServiceDefaults/GariKaagada.ServiceDefaults.csproj" />
+</Solution>

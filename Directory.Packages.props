@@ -1,0 +1,54 @@
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Aspire hosting (AppHost project). Aspire.Hosting.AppHost itself is NOT listed here:
+         the Aspire.AppHost.Sdk implicitly references it at the SDK's own pinned version, and
+         CPM rejects an explicit PackageVersion entry for an SDK-implicit package (NU1009). -->
+    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Hosting.Keycloak" Version="13.4.6-preview.1.26319.6" />
+    <PackageVersion Include="Aspire.Hosting.JavaScript" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Hosting.Browsers" Version="13.4.6-preview.1.26319.6" />
+
+    <!-- Aspire client integrations (consumed by Api.Data / MigrationWorker) -->
+    <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.4.6" />
+
+    <!-- EF Core -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
+
+    <!-- Validation -->
+    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+
+    <!-- OpenAPI / TypeScript generation -->
+    <PackageVersion Include="NSwag.AspNetCore" Version="14.7.1" />
+    <PackageVersion Include="NSwag.MSBuild" Version="14.7.1" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.16.9" />
+
+    <!-- Aspire ServiceDefaults (versions as emitted by the official `aspire-servicedefaults` template) -->
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.6.0" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.6.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.2" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.1" />
+
+    <!-- ASP.NET Core / Worker Service scaffolding (versions as emitted by the official
+         `webapi`/`worker` templates) -->
+    <!-- Every 10.x version of Microsoft.AspNetCore.OpenApi (including this one) pins
+         Microsoft.OpenApi 2.0.0 exactly, which has a known high-severity NuGet audit
+         advisory (NU1903, GHSA-v5pm-xwqc-g5wc). Bumping Microsoft.OpenApi directly breaks
+         Microsoft.AspNetCore.OpenApi's own source generator, so the advisory is suppressed
+         per-project instead (see NuGetAuditSuppress in GariKaagada.Api/GariKaagada.BFF) until
+         Microsoft ships a compatible fix. -->
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.6" />
+  </ItemGroup>
+
+</Project>

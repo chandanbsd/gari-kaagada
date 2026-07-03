@@ -1,0 +1,13 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+
+# Node (gari-kagada-client has its own .gitignore too, but bin/obj above are repo-root-wide)
+node_modules/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
