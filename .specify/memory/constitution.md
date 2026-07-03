@@ -1,25 +1,33 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 2.0.0 → 2.1.0
+Version change: 2.1.0 → 2.2.0
 
-Reason for version: MINOR bump. Principle X (Code Quality & Maintainability First) is expanded
-with a new sub-rule, "Best practices over shortcuts, official documentation over subjective
-preference": technical decisions must be verified against official documentation rather than
-subjective preference or unverified prior knowledge, shortcuts that skip a documented best
-practice are PROHIBITED unless justified in the plan's Complexity Tracking table, and gaps in
-official documentation must be surfaced explicitly rather than silently assumed. This is
-additive guidance strengthening an already-ratified NON-NEGOTIABLE principle's existing
-"quality over shortcuts" ethos — nothing previously permitted becomes prohibited and no other
-principle's substance changes — hence MINOR rather than MAJOR.
+Reason for version: MINOR bump. Principle VII (Layered .NET Project Architecture) is expanded
+with a fuller, more explicit solution layout: a `GariKaagada.ServiceDefaults` project (standard
+Aspire service-defaults pattern, wiring OTel/health-checks/resilience once for every runnable
+service), a single solution-root `Directory.Packages.props` for Central Package Management,
+explicit solution-folder organization (`BFF`, `Api`) within one top-level solution, Contracts
+formalized as exactly two record kinds (Payload / Dto), and the Angular project named
+explicitly (`gari-kagada-client`) and declared as an Aspire-orchestrated resource.
+`GariKaagada.MigrationWorker` is retained (confirmed with the user — its omission from the
+requested project list was incidental, not an intentional removal). This is additive/
+clarifying detail on an already-ratified NON-NEGOTIABLE principle: every previously mandated
+project and reference rule still exists unchanged; nothing compliant before becomes
+non-compliant — hence MINOR rather than MAJOR.
 
 Modified principles:
-  X. Code Quality & Maintainability First (NON-NEGOTIABLE — OVERARCHING PRINCIPLE) — added the
-     "Best practices over shortcuts, official documentation over subjective preference"
-     sub-rule.
+  VII. Layered .NET Project Architecture (NON-NEGOTIABLE) — added `GariKaagada.ServiceDefaults`,
+       Central Package Management via `Directory.Packages.props`, explicit solution-folder
+       structure, formalized Contracts as Payload/Dto records, and named the Angular project
+       `gari-kagada-client` as an Aspire-declared resource.
 
-Added sections: None (sub-rule added within an existing principle, not a new top-level section).
+Added sections: None (expansion within an existing principle, not a new top-level section).
 Removed sections: None.
+
+Also updated: Technical Constraints → "Frontend" bullet names `gari-kagada-client`;
+"Orchestration" bullet mentions `gari-kagada-client` as an Aspire resource; new "Service
+defaults" and "Package versioning" bullets added.
 
 Templates reviewed:
   - .specify/templates/plan-template.md   ✅ No changes needed — Constitution Check section
@@ -29,7 +37,9 @@ Templates reviewed:
   - .specify/templates/tasks-template.md  ✅ No changes needed — no principle-specific text.
   - No .specify/templates/commands/ directory exists in this project — nothing to update.
 
-Follow-up TODOs: None.
+Follow-up TODOs: None. `AGENTS.md` (the agent-facing standards extraction at the repo root)
+should be regenerated to reflect this amendment — tracked as a manual follow-up, not done
+automatically by this command.
 -->
 
 # GariKaagada Constitution
@@ -156,38 +166,69 @@ important for a service whose entire value proposition is protecting user anonym
 
 ### VII. Layered .NET Project Architecture (NON-NEGOTIABLE)
 
-All .NET code MUST follow a strict layered project structure. No project may reference a
-project in a layer above its own. The mandated solution layout is:
+All .NET code MUST follow a strict layered project structure, organized as **one top-level
+solution** (`GariKaagada.sln`/`.slnx`) with solution folders grouping the BFF and API tiers for
+navigation — solution folders are an IDE-organization construct only; the actual dependency
+graph is enforced by project references, not solution grouping. No project may reference a
+project in a layer above its own. The mandated layout is:
 
-*BFF tier*
+*Aspire orchestration (solution root)*
+- `GariKaagada.AppHost` — .NET Aspire AppHost; declares every service, container (PostgreSQL,
+  Keycloak, SigNoz), and inter-project reference; the only project that references all
+  runnable services.
+- `GariKaagada.ServiceDefaults` — class library following Aspire's standard service-defaults
+  convention (`AddServiceDefaults()`); wires OpenTelemetry export to SigNoz (Principle XII),
+  health checks, service discovery, and resilience policies identically across every runnable
+  service. Zero dependencies on other solution projects. Referenced by `GariKaagada.BFF`,
+  `GariKaagada.Api`, and `GariKaagada.MigrationWorker` — never by `.Business`, `.Data`, or
+  `.Contracts` libraries.
+- `GariKaagada.MigrationWorker` — Aspire worker service; references `GariKaagada.Api.Data` and
+  `GariKaagada.ServiceDefaults`; runs EF Core Migrations at startup before the API becomes
+  available.
+- **Central package management**: a single `Directory.Packages.props` at the solution root
+  MUST govern every NuGet package version across all .NET projects (`ManagePackageVersionsCentrally`).
+  Per-project `<PackageReference>` elements MUST NOT specify a `Version` attribute; version
+  pinning happens exclusively in this one file.
+
+*BFF tier (solution folder: `BFF`)*
 - `GariKaagada.BFF` — ASP.NET Core Web API; entry point, controllers, SignalR hub; references
-  `GariKaagada.BFF.Business` and `GariKaagada.Contracts` only.
+  `GariKaagada.BFF.Business`, `GariKaagada.Contracts`, and `GariKaagada.ServiceDefaults` only.
 - `GariKaagada.BFF.Business` — class library; BFF business logic, auth forwarding, service
   orchestration; references `GariKaagada.Contracts` only.
 
-*Backend API tier*
+*API tier (solution folder: `Api`)*
 - `GariKaagada.Api` — ASP.NET Core Web API; entry point and controllers; references
-  `GariKaagada.Api.Business` and `GariKaagada.Contracts` only.
+  `GariKaagada.Api.Business`, `GariKaagada.Contracts`, and `GariKaagada.ServiceDefaults` only.
 - `GariKaagada.Api.Business` — class library; all domain logic (accounts, kagada, distribution
   algorithm); references `GariKaagada.Api.Data` and `GariKaagada.Contracts`.
 - `GariKaagada.Api.Data` — class library; EF Core `DbContext`, entity classes, migrations,
   repository implementations; references `GariKaagada.Contracts` for shared value types only.
 
 *Shared*
-- `GariKaagada.Contracts` — class library; all request/response DTOs, gRPC message types, and
-  SignalR event payload types crossing the BFF ↔ API boundary. Zero dependencies on other
-  solution projects. Neither BFF nor API may define ad-hoc inter-service types outside this
-  library.
+- `GariKaagada.Contracts` — class library; every cross-boundary type used by both `BFF` and
+  `Api` is one of exactly two kinds: a **Payload** record (a request — e.g.
+  `CreateKagadaPayload`) or a **Dto** record (a response — e.g. `KagadaDto`), plus the gRPC
+  message types and SignalR event payload types that cross the BFF ↔ API boundary. Zero
+  dependencies on other solution projects. Neither BFF nor API may define ad-hoc inter-service
+  types outside this library. Every Payload/Dto record MUST be mirrored by an NSwag-generated
+  (never hand-authored) TypeScript interface of the same shape (Principle XI) consumed by
+  `gari-kagada-client`.
 
-*Aspire orchestration*
-- `GariKaagada.AppHost` — .NET Aspire AppHost; declares all services, containers, and
-  references.
-- `GariKaagada.MigrationWorker` — Aspire worker service; runs EF Core Migrations at startup
-  before the API becomes available.
+*Frontend*
+- `gari-kagada-client` — the Angular project (Principle III, IV). Not part of the .NET solution;
+  consumes `GariKaagada.BFF`'s OpenAPI spec via NSwag-generated TypeScript clients/interfaces
+  for every `Contracts` Payload/Dto (Principle XI). Declared as an Aspire resource in
+  `GariKaagada.AppHost` so it starts, stops, and is service-discoverable alongside the .NET
+  services — "everything connected through Aspire" applies to the frontend too, not just the
+  backend tiers.
 
 **Rationale**: Enforcing project-level layer boundaries via `.csproj` references makes illegal
 dependencies a compile error, not a code-review finding. The Contracts library eliminates
-implicit coupling between services.
+implicit coupling between services. `ServiceDefaults` guarantees every service is
+instrumented, health-checked, and resilient identically instead of each project reinventing
+that wiring — and keeps the SigNoz OTel export (Principle XII) defined in exactly one place.
+Central package management via `Directory.Packages.props` prevents version drift between the
+BFF and API tiers, which would otherwise be invisible until a runtime type mismatch.
 
 ### VIII. Kagada Distribution Algorithm Integrity (NON-NEGOTIABLE)
 
@@ -399,9 +440,9 @@ mirroring the implementation.
 
 ## Technical Constraints
 
-- **Frontend**: Angular (latest stable LTS), Angular Material, RxJS, NgRX Signal Store, Angular
-  Signals, `@microsoft/signalr`, TypeScript, SCSS. No other UI or state libraries without a
-  constitution amendment.
+- **Frontend**: Angular project `gari-kagada-client` (latest stable LTS), Angular Material,
+  RxJS, NgRX Signal Store, Angular Signals, `@microsoft/signalr`, TypeScript, SCSS. No other UI
+  or state libraries without a constitution amendment.
 - **Real-time transport**: SignalR. Frontend uses `@microsoft/signalr`; BFF and backend use
   ASP.NET Core SignalR hubs.
 - **Backend services** (both latest stable):
@@ -411,8 +452,15 @@ mirroring the implementation.
     domain logic, the kagada distribution algorithm, and database access.
 - **BFF → API transport**: Internal HTTPS or gRPC. Raw SignalR proxying to the backend is
   PROHIBITED.
-- **Orchestration**: .NET Aspire (latest stable). All services, containers, environment
-  variables, and inter-service references MUST be declared in the Aspire AppHost project.
+- **Orchestration**: .NET Aspire (latest stable). All services (including `gari-kagada-client`),
+  containers, environment variables, and inter-service references MUST be declared in the
+  `GariKaagada.AppHost` project.
+- **Service defaults**: `GariKaagada.ServiceDefaults`, referenced by every runnable .NET
+  service (`GariKaagada.BFF`, `GariKaagada.Api`, `GariKaagada.MigrationWorker`), wires
+  OpenTelemetry export to SigNoz, health checks, service discovery, and resilience policies
+  identically (Principle VII, XII).
+- **Package versioning**: Central Package Management via a single `Directory.Packages.props`
+  at the solution root (Principle VII). No per-project `<PackageReference Version="...">`.
 - **Containers**: Podman. Docker MUST NOT be required.
 - **Database**: Self-hosted PostgreSQL, provisioned as a Podman container via Aspire, used for
   both relational tables and `jsonb` document-style data (Principle XIII). No managed cloud DB
@@ -497,4 +545,4 @@ VIII and IX together. PRs containing any test files MUST be rejected (Principle 
 
 Complexity exceptions MUST be justified in the plan's Complexity Tracking table.
 
-**Version**: 2.1.0 | **Ratified**: 2026-07-02 | **Last Amended**: 2026-07-03
+**Version**: 2.2.0 | **Ratified**: 2026-07-02 | **Last Amended**: 2026-07-03
