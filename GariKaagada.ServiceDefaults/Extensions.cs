@@ -5,6 +5,8 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.ServiceDiscovery;
 using OpenTelemetry;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
@@ -80,11 +82,50 @@ public static class Extensions
 
     private static TBuilder AddOpenTelemetryExporters<TBuilder>(this TBuilder builder) where TBuilder : IHostApplicationBuilder
     {
+        // NOTE: We deliberately never call the OpenTelemetryBuilder.UseOtlpExporter()
+        // convenience method used by the default Aspire template. It registers a guard that
+        // throws NotSupportedException ("Signal-specific AddOtlpExporter methods and the
+        // cross-cutting UseOtlpExporter method being invoked on the same IServiceCollection is
+        // not supported") the moment any signal-specific AddOtlpExporter(...) call also exists
+        // in the same container — confirmed by GariKaagada.MigrationWorker crashing on startup
+        // (unhandled exception, exit code 134) the first time this was mixed with the second
+        // ("signoz") destination below. Since two OTLP destinations are required, both are
+        // wired through the same signal-specific AddOtlpExporter(name, configure) API instead —
+        // the unnamed overload reads the standard OTEL_EXPORTER_OTLP_* env vars exactly like
+        // UseOtlpExporter() would, just without tripping its cross-cutting guard.
         var useOtlpExporter = !string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]);
 
         if (useOtlpExporter)
         {
-            builder.Services.AddOpenTelemetry().UseOtlpExporter();
+            // Default/unnamed OTLP destination: Aspire's AddProject() auto-injects
+            // OTEL_EXPORTER_OTLP_ENDPOINT (+ headers) for every project resource, pointing at
+            // the Aspire dashboard's own OTLP receiver — this is what populates the
+            // dashboard's own Structured Logs/Traces/Metrics pages.
+            builder.Services.AddOpenTelemetry()
+                .WithTracing(tracing => tracing.AddOtlpExporter())
+                .WithMetrics(metrics => metrics.AddOtlpExporter());
+            builder.Logging.AddOpenTelemetry(logging => logging.AddOtlpExporter());
+        }
+
+        // Second, named OTLP destination: SigNoz (constitution Principle XII's mandated
+        // backend), read from a distinctly-named env var (see GariKaagada.AppHost/AppHost.cs)
+        // rather than overwriting OTEL_EXPORTER_OTLP_ENDPOINT above — so telemetry reaches
+        // both the Aspire dashboard and SigNoz, not one or the other.
+        var signozEndpoint = builder.Configuration["OTEL_EXPORTER_OTLP_SIGNOZ_ENDPOINT"];
+        if (!string.IsNullOrWhiteSpace(signozEndpoint))
+        {
+            var signozUri = new Uri(signozEndpoint);
+            void ConfigureSignozOtlp(OtlpExporterOptions o)
+            {
+                o.Endpoint = signozUri;
+                o.Protocol = OtlpExportProtocol.Grpc;
+            }
+
+            builder.Services.AddOpenTelemetry()
+                .WithTracing(tracing => tracing.AddOtlpExporter("signoz", ConfigureSignozOtlp))
+                .WithMetrics(metrics => metrics.AddOtlpExporter("signoz", ConfigureSignozOtlp));
+
+            builder.Logging.AddOpenTelemetry(logging => logging.AddOtlpExporter("signoz", ConfigureSignozOtlp));
         }
 
         // Uncomment the following lines to enable the Azure Monitor exporter (requires the Azure.Monitor.OpenTelemetry.AspNetCore package)

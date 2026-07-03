@@ -146,9 +146,12 @@ var signoz = builder.AddContainer("signoz", "signoz/signoz", "v0.131.1")
 // .NET services (constitution Principle VII: layered project architecture)
 // =============================================================================
 
-// Every runnable .NET service exports OTLP to SigNoz's collector (constitution Principle XII)
-// — ServiceDefaults' ConfigureOpenTelemetry() only enables the OTLP exporter when
-// OTEL_EXPORTER_OTLP_ENDPOINT is set. Deliberately NOT gated with .WaitFor(signozOtelCollector):
+// Every runnable .NET service exports OTLP to *both* the Aspire dashboard (its own OTLP
+// receiver, auto-injected by AddProject() as the default/unnamed OTEL_EXPORTER_OTLP_ENDPOINT —
+// left untouched here) and SigNoz's collector (constitution Principle XII's mandated backend),
+// via OTEL_EXPORTER_OTLP_SIGNOZ_ENDPOINT, a second, distinctly-named destination that
+// ServiceDefaults' AddOpenTelemetryExporters() registers as a named "signoz" OTLP exporter
+// alongside the default one. Deliberately NOT gated with .WaitFor(signozOtelCollector):
 // telemetry export is a side effect, not a readiness dependency — the app must still start
 // (and satisfy SC-001/User Story 1) even if the observability pipeline is degraded, per
 // standard Aspire/observability practice of never blocking core app startup on a telemetry
@@ -158,13 +161,13 @@ var signozOtlpEndpoint = signozOtelCollector.GetEndpoint("otlp-grpc");
 var migrationWorker = builder.AddProject<Projects.GariKaagada_MigrationWorker>("migrationworker")
     .WithReference(gariKaagadaDb)
     .WaitFor(gariKaagadaDb)
-    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", signozOtlpEndpoint);
+    .WithEnvironment("OTEL_EXPORTER_OTLP_SIGNOZ_ENDPOINT", signozOtlpEndpoint);
 
 var api = builder.AddProject<Projects.GariKaagada_Api>("api")
     .WithReference(gariKaagadaDb)
     .WaitFor(gariKaagadaDb)
     .WaitForCompletion(migrationWorker)
-    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", signozOtlpEndpoint)
+    .WithEnvironment("OTEL_EXPORTER_OTLP_SIGNOZ_ENDPOINT", signozOtlpEndpoint)
     // Scalar's default route (Scalar.AspNetCore 2.x) for the "v1" document MapOpenApi()
     // already serves at /openapi/v1.json — dev-only, matching that call's own guard.
     .WithUrl("/scalar", "API Docs (Scalar)");
@@ -174,7 +177,7 @@ var bff = builder.AddProject<Projects.GariKaagada_BFF>("bff")
     .WaitFor(api)
     .WithReference(keycloak)
     .WaitFor(keycloak)
-    .WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", signozOtlpEndpoint)
+    .WithEnvironment("OTEL_EXPORTER_OTLP_SIGNOZ_ENDPOINT", signozOtlpEndpoint)
     .WithUrl("/scalar", "API Docs (Scalar)");
 
 // =============================================================================
