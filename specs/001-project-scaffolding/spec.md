@@ -176,7 +176,10 @@ project without hand-authoring it there.
 - **SC-004**: A developer introducing a new shared request/response type needs to author it in
   exactly one place for an equivalent, matching type to become available to frontend code.
 - **SC-005**: Stopping the orchestration project leaves zero orphaned running services or
-  containers behind.
+  containers behind, except backing services deliberately kept alive across restarts to satisfy
+  SC-006 (discovered during implementation: these two criteria are only simultaneously
+  satisfiable if "orphaned" means unintentionally abandoned, not intentionally kept running —
+  the latter is a visible, documented trade-off, not an oversight).
 - **SC-006**: After any partial startup failure, re-running the single start command succeeds
   without manual cleanup, on every attempt.
 

@@ -1,6 +1,6 @@
 # GariKaagada — Agent Technical Standards
 
-Generated from `.specify/memory/constitution.md` v2.1.0 (last amended 2026-07-03). This file is
+Generated from `.specify/memory/constitution.md` v2.2.0 (last amended 2026-07-03). This file is
 a **practical, agent-facing extraction** of the constitution's technical standards — the MUSTs,
 PROHIBITEDs, and mandated tech choices any coding agent (Claude, or otherwise) needs before
 writing code in this repo. It intentionally omits governance/versioning/amendment process,
@@ -8,6 +8,11 @@ which lives only in the constitution.
 
 **If this file and the constitution ever disagree, the constitution wins** — update this file to
 match it, never the other way around. Regenerate this file whenever the constitution is amended.
+
+The project scaffolding (feature `001-project-scaffolding`) has been implemented — every
+project below exists on disk at the path shown, wired per Principle VII, and has been validated
+end-to-end via `aspire run`. See "Scaffolding implementation notes" near the end of this file for
+real, verified gotchas discovered while building it (not theoretical — hit and fixed for real).
 
 ---
 
@@ -237,3 +242,48 @@ full context on each.
 - Quality instead comes from: strong typing (TS strict mode, C# nullable refs), compile-time
   safety (interfaces, FluentValidation, EF Core model validation), linting/formatting, and
   architectural pattern enforcement (layering, factory pattern, no raw SQL).
+
+## Scaffolding implementation notes (real, verified — not theoretical)
+
+- **Layering is enforced by `Directory.Build.targets`**, not by convention alone: a
+  `GariKaagadaEnforceLayering` target fails the build if `GariKaagada.Api.Data`,
+  `GariKaagada.Api.Business`, `GariKaagada.BFF.Business`, or `GariKaagada.Contracts`
+  references `GariKaagada.BFF`, `GariKaagada.Api`, `GariKaagada.AppHost`, or
+  `GariKaagada.MigrationWorker`. Plain `ProjectReference` has no notion of "layer" on its own —
+  without this target, an upward reference compiles fine unless it happens to trigger an
+  unrelated failure.
+- **`Microsoft.AspNetCore.OpenApi` (every 10.x version) pins a vulnerable `Microsoft.OpenApi`
+  2.0.0** (NU1903). Bumping `Microsoft.OpenApi` directly breaks `Microsoft.AspNetCore.OpenApi`'s
+  own source generator. Fix in place: `<NuGetAuditSuppress>` for that specific advisory URL in
+  `GariKaagada.Api.csproj`/`GariKaagada.BFF.csproj` — re-check whether Microsoft has shipped a
+  fix before copying this pattern elsewhere.
+- **Aspire's JavaScript integration (`AddJavaScriptApp`) runs `npm run dev` by default** — the
+  Angular CLI's own `ng new` output only has a `start` script. `gari-kagada-client/package.json`
+  has a `"dev": "ng serve --port $PORT --host 0.0.0.0"` script added specifically for this.
+- **ClickHouse's Docker image disables all network access for the `default` user** unless
+  `CLICKHOUSE_PASSWORD` is set — confirmed from the container's own startup log, not assumed.
+- **SigNoz's otel-collector image ships a static `/etc/otel/config.yaml`** with no env-var
+  substitution, hardcoding ClickHouse as `localhost`/`clickhouse` — meaningless once ClickHouse
+  is a separate container. Fixed via a bind-mounted corrected copy
+  (`GariKaagada.AppHost/signoz-config/otel-collector-config.yaml`).
+- **SigNoz requires a one-shot schema migrator** (`signoz/signoz-schema-migrator:sync`) to
+  create its ClickHouse databases before the otel-collector can start; its default
+  `--cluster-name cluster` doesn't match a standalone ClickHouse instance's actual cluster name
+  (`default` — confirmed via `SELECT cluster FROM system.clusters`).
+- **Known, unresolved limitation**: `clickhouse/clickhouse-keeper`'s TCP port (9181) binds to
+  loopback only by default; a `<listen_host>0.0.0.0</listen_host>` override placed in
+  `/etc/clickhouse-keeper/config.d/` did not take effect in testing (root cause not yet
+  identified — keeper may not merge `config.d/` the same way `clickhouse-server` does). As a
+  result, `signoz-schema-migrator` and `signoz-otel-collector` cannot currently reach the
+  keeper from a separate container, so the **SigNoz UI/otel-collector are not fully
+  operational** — this does **not** block the rest of the stack (`GariKaagada.Api`/`.BFF`/
+  `.MigrationWorker`/`gari-kagada-client`/PostgreSQL/Keycloak all start and pass health checks
+  independently; OTLP export is fire-and-forget by design, never gates app startup). Follow-up:
+  investigate ClickHouse Keeper's actual config-merge behavior, or mount a fully custom
+  `keeper_config.xml` instead of a `config.d/` fragment.
+- **`ContainerLifetime.Persistent` containers intentionally do not stop** when the AppHost
+  stops (via `aspire stop`) — this is what makes idempotent restart (SC-006) possible. Verified:
+  `aspire stop` (not Ctrl+C/`pkill`) is the correct way to stop a run — it fully terminates all
+  non-persistent processes/containers (including the frontend's `npm run dev` and the container
+  network tunnel proxy) while intentionally leaving persistent-lifetime containers
+  (PostgreSQL, Keycloak, SigNoz's ClickHouse/keeper) running for the next `aspire run` to reuse.

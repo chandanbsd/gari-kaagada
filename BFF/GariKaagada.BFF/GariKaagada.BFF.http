@@ -1,0 +1,6 @@
+@GariKaagada.BFF_HostAddress = http://localhost:5112
+
+GET {{GariKaagada.BFF_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

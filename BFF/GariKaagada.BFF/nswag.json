@@ -1,0 +1,19 @@
+{
+  "runtime": "Net100",
+  "documentGenerator": {
+    "fromDocument": {
+      "json": "obj/GariKaagada.BFF.json",
+      "output": null
+    }
+  },
+  "codeGenerators": {
+    "openApiToTypeScriptClient": {
+      "template": "Fetch",
+      "typeScriptVersion": 6.0,
+      "dateTimeType": "String",
+      "generateClientClasses": true,
+      "generateDtoTypes": true,
+      "output": "../../gari-kagada-client/src/app/generated/api-client.ts"
+    }
+  }
+}
